@@ -10,10 +10,13 @@ from chainer.training import extensions
 from chainer.datasets import TupleDataset
 
 from fm import FM
+from vfm import VFM
 
 # Hyperparameters
 n_dim = 20
 batchsize = 1024 * 8
+model_type = 'FM'
+
 
 # Download, unzip and read in the dataset
 name = 'ml-1m.zip'
@@ -46,9 +49,13 @@ train = TupleDataset(tval, tloc, ty)
 valid = TupleDataset(vval, vloc, vy)
 
 # Setup model
-model = FM(n_features, n_dim, lambda0=0.0, lambda1=0.0, lambda2=0.005,
-           init_bias=rating.mean())
-model.compute_accuracy = False
+if model_type == 'FM':
+    model = FM(n_features, n_dim, lambda0=0.0, lambda1=0.0, lambda2=0.005,
+               init_bias=ty.mean())
+elif model_type == 'VFM':
+    mu = ty.mean()
+    lv = 0.5 * np.log(ty.std())
+    model = VFM(n_features, n_dim, init_bias_mu=mu, init_bias_lv=lv)
 optimizer = chainer.optimizers.Adam()
 optimizer.setup(model)
 
@@ -56,11 +63,11 @@ optimizer.setup(model)
 train_iter = chainer.iterators.SerialIterator(train, batchsize)
 valid_iter = chainer.iterators.SerialIterator(valid, batchsize,
                                               repeat=False, shuffle=False)
-updater = training.StandardUpdater(train_iter, optimizer)
+updater = training.StandardUpdater(train_iter, optimizer, device=0)
 trainer = training.Trainer(updater, (70, 'epoch'), out='out')
 
 # Setup logging, printing & saving
-keys = ['loss', 'mse', 'rmse', 'reg0', 'reg1', 'reg2', 'bias']
+keys = ['loss', 'rmse', 'bias', 'regt']
 reports = ['iteration', 'epoch']
 reports += ['main/' + key for key in keys]
 reports += ['validation/main/' + key for key in keys]
