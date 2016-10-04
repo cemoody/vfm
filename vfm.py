@@ -2,13 +2,23 @@ from chainer import Chain
 from chainer import links as L
 from chainer import functions as F
 from chainer import reporter
+from chainer import cuda
+from chainer import Variable
 import numpy as np
 
-from fm import FM
+
+def dot(a, b):
+    """ Simple dot product"""
+    return F.sum(a * b, axis=-1)
+
+
+def interaction(loc):
+    """ Compute all pairs of points in loc array.
+    """
+    return np.array(np.meshgrid(loc, loc)).T.reshape(-1, 2)
 
 
 class VFM(Chain):
-    _mask = None
     lv_floor = -100.0
 
     def __init__(self, n_features=None, n_dim=8, lossfun=F.mean_squared_error,
@@ -27,59 +37,30 @@ class VFM(Chain):
         # will have means (mu) and log variances (lv) for each component.
         super(VFM, self).__init__(bias_mu=L.Bias(shape=(1,)),
                                   bias_lv=L.Bias(shape=(1,)),
-                                  slope_mu=L.Bias(shape=(1, 1, 1)),
-                                  slope_lv=L.Bias(shape=(1, 1, 1)),
-                                  slope_delta_mu=L.EmbedID(n_features, 1),
-                                  slope_delta_lv=L.EmbedID(n_features, 1),
-                                  latent_mu=L.Bias(shape=(1, 1, n_dim)),
-                                  latent_lv=L.Bias(shape=(1, 1, n_dim)),
-                                  latent_delta_mu=L.EmbedID(n_features, n_dim),
-                                  latent_delta_lv=L.EmbedID(n_features, n_dim))
+                                  slop_mu=L.Bias(shape=(1, 1, 1)),
+                                  slop_lv=L.Bias(shape=(1, 1, 1)),
+                                  slop_delta_mu=L.EmbedID(n_features, 1,
+                                                          ignore_label=-1),
+                                  slop_delta_lv=L.EmbedID(n_features, 1,
+                                                          ignore_label=-1),
+                                  feat_mu=L.Bias(shape=(1, 1, n_dim)),
+                                  feat_lv=L.Bias(shape=(1, 1, n_dim)),
+                                  feat_delta_mu=L.EmbedID(n_features, n_dim,
+                                                          ignore_label=-1),
+                                  feat_delta_lv=L.EmbedID(n_features, n_dim,
+                                                          ignore_label=-1))
 
         # Xavier initialize weights
         c = np.sqrt(n_features * n_dim)
         d = np.sqrt(n_features)
-        self.latent_delta_mu.W.data[...] = np.random.randn(n_features, n_dim) / c
-        self.latent_delta_lv.W.data[...] = np.random.randn(n_features, n_dim) / c - 2.
-        self.slope_delta_mu.W.data[...] = np.random.randn(n_features, 1) / d
-        self.slope_delta_lv.W.data[...] = np.random.randn(n_features, 1) / d - 2.
+        self.feat_delta_mu.W.data[...] = np.random.randn(n_features, n_dim) / c
+        self.feat_delta_lv.W.data[...] = np.random.randn(n_features, n_dim) / c
+        self.slop_delta_mu.W.data[...] = np.random.randn(n_features, 1) / d
+        self.slop_delta_lv.W.data[...] = np.random.randn(n_features, 1) / d
         self.bias_mu.b.data[...] *= 0.0
         self.bias_mu.b.data[...] += init_bias_mu
         self.bias_lv.b.data[...] *= 0.0
         self.bias_lv.b.data[...] += init_bias_lv
-
-    def mask(self, bs, nf):
-        if self._mask is None or self._mask.shape[0] != bs:
-            mask = self.xp.ones((nf, nf), dtype='float32')
-            mask -= self.xp.eye(nf, dtype='float32')
-            masks = self.xp.tile(mask, (bs, 1, 1))
-            self._mask = masks
-        return self._mask
-
-    def rank(self, val, loc):
-        """ Given the sparse feature vector for a question with no label
-        determine the posterior variance.
-
-        Posterior variance is defined as the variance on the overall bias
-        plus the variance on the slope plus the variance on the interaction
-        term. The latter terms is the most complicated; see the readme for
-        the full derivation.
-        """
-
-        var_bias = F.exp(self.bias_lv.b)
-        var_slop = F.exp(F.batch_matmul(self.slope_delta_lv(loc), val))
-
-        feat_var = F.exp(self.latent_delta_lv.W)
-        var_intx = None
-        
-        # Here we compute the log variance while keeping everything in 
-        # in log space
-        # log(var) = log(var1 + var2 + var3)
-        # log(var) = log(e^logvar1 + e^logvar2 + e^logvar2)
-        # log(var) = logsumexp(logvars)
-
-        log_var = F.logsumexp(log_vars)
-
 
     def term_bias(self, bs, is_test=None):
         """ Compute overall bias and broadcast to shape of batchsize
@@ -100,16 +81,16 @@ class VFM(Chain):
         # Compute prior on the bias, so compute the KL div
         # from the KL(N(mu_bias, var_bias) | N(0, 1))
         kld = F.gaussian_kl_divergence(self.bias_mu.b, self.bias_lv.b)
-        return bias, kld
+        return bias, bs_lv, kld
 
-    def term_slop(self, loc, val, bs, nf):
+    def term_slop(self, loc, val, is_test, bs, nf):
         """ Compute the slope for each active feature.
         """
         shape = (bs, nf)
 
         # Reshape all of our constants
-        pr_mu = F.broadcast_to(self.slope_mu.b, shape)
-        pr_lv = F.broadcast_to(self.slope_lv.b, shape)
+        pr_mu = F.broadcast_to(self.slop_mu.b, shape)
+        pr_lv = F.broadcast_to(self.slop_lv.b, shape)
         # This is either zero or a very negative number
         # indicating to sample N(mean, logvar) or just draw
         # the mean preicsely
@@ -117,22 +98,48 @@ class VFM(Chain):
         is_test *= self.lv_floor
 
         # The feature slopes are grouped together so that they
-        # all share a common mean. Then individual features slope_delta_lv
+        # all share a common mean. Then individual features slop_delta_lv
         # are shrunk towards zero, which effectively sets features to fall
         # back on the group mean.
-        sl_mu = self.slope_delta_mu(loc) + pr_mu
-        sl_lv = self.slope_delta_lv(loc) + pr_lv + is_test
+        sl_mu = self.slop_delta_mu(loc) + pr_mu
+        sl_lv = self.slop_delta_lv(loc) + pr_lv + is_test
         coef = F.gaussian(sl_mu, sl_lv)
         slop = F.sum(coef * val, axis=1)
-        
-        # Calculate divergence between group mean and N(0, 1)
-        kld1 = F.gaussian_kl_divergence(self.slope_mu.b, self.slope_lv.b)
-        # Calculate divergence of individual delta means and delta vars
-        args = (self.slope_delta_mu.W, self.slope_delta_lv.W)
-        kld2 = F.gaussian_kl_divergence(*args)
-        return slop, kld1 + kld2
 
-    def forward(self, val, loc, y, is_test, lv_floor=-100):
+        # Calculate divergence between group mean and N(0, 1)
+        kld1 = F.gaussian_kl_divergence(self.slop_mu.b, self.slop_lv.b)
+        # Calculate divergence of individual delta means and delta vars
+        args = (self.slop_delta_mu.W, self.slop_delta_lv.W)
+        kld2 = F.gaussian_kl_divergence(*args)
+        return slop, sl_lv, kld1 + kld2
+
+    def term_feat(self, iloc, jloc, ival, jval, is_test, bs, nf):
+        # Change all of the shapes to form interaction vectors
+        shape = (bs, nf)
+        feat_mu = F.broadcast_to(self.feat_mu.b, shape)
+        feat_lv = F.broadcast_to(self.feat_lv.b, shape)
+        is_test = F.broadcast_to(F.reshape(is_test, (bs, 1)), shape)
+        is_test *= self.lv_floor
+
+        # Construct the interaction mean and variance
+        # iloc is (bs, nf), feat(iloc) is (bs, nf, ndim) and
+        # dot(feat, feat) is (bs, nf)
+        feat_mu += dot(self.feat_delta_mu(iloc), self.feat_delta_mu(jloc))
+        feat_lv += dot(self.feat_delta_lv(iloc), self.feat_delta_lv(jloc))
+        feat_lv += is_test
+        # feat_vec is (bs, nf) with each element indicating <v_i, v_j>
+        feat_vec = F.gaussian(feat_mu, feat_lv)
+        # feat is (bs, )
+        feat = dot(feat_vec, ival * jval)
+
+        # Compute the KLD for the group mean vector and variance vector
+        kld1 = F.gaussian_kl_divergence(self.feat_mu.b, self.feat_lv.b)
+        # Compute the KLD for vector deviations from the group mean and var
+        kld2 = F.gaussian_kl_divergence(self.feat_delta_mu.W,
+                                        self.feat_delta_lv.W)
+        return feat, feat_lv, kld1 + kld2
+
+    def forward(self, loc, val, iloc, jloc, ival, jval, y, is_test):
         """ Given the sparse feature vector defined by location
         integers for the column index and the value at that index.
         y ~ c + sum(w_i x_i) + sum_ij( <v_i, v_j> * x_i * x_j)
@@ -158,61 +165,40 @@ class VFM(Chain):
         """
         bs = val.data.shape[0]
         nf = val.data.shape[1]
-        mask = self.mask(bs, nf)
 
-        bias = self.term_bias(bs, is_test)
-        slop = self.term_slop(bs, nf)
-        intx = self.term_intx(bs, nf)
-
-
-        # Form interaction vectors
-        # Input shape is (batchsize, n_feat_max) and
-        # v is (batchsize, n_feat_max, n_dim)
-        shape = (bs, nf, self.n_dim)
-        pr_mu = F.broadcast_to(self.latent_mu.b, shape)
-        pr_lv = F.broadcast_to(self.latent_lv.b, shape)
-        vi_mu = self.latent_delta_mu(loc) + pr_mu
-        vi_lv = self.latent_delta_lv(loc) + pr_lv
-        vi_lvc = F.broadcast_to(F.reshape(is_test, (bs, 1, 1)), shape)
-        vi_lvc *= lv_floor
-        vi = F.gaussian(vi_mu, vi_lv + vi_lvc)
-        # Form square latent interaction matrix of shape
-        # (batchsize, n_feat_max, n_feat_max)
-        vij = F.batch_matmul(vi, vi, transb=True)
-        # Form square observed feature matrix of shape
-        # (batchsize, n_feat_max, n_feat_max)
-        xij = F.batch_matmul(val, val, transb=True)
-        # This double sums all of the interaction terms aside
-        # from the computational burden this shouldn't be a problem.
-        # TODO: implement the trick in Rendle's paper
-        # that makes this O(kN) instead of O(kN^2)
-        intx = F.sum(vij * xij * mask, axis=(1, 2))
+        bias, bias_lv, kld0 = self.term_bias(bs, is_test)
+        slop, slop_lv, kld1 = self.term_slop(loc, val, is_test, bs, nf)
+        feat, feat_lv, kld2 = self.term_feat(iloc, jloc, ival, jval,
+                                             is_test, bs, nf)
 
         # Optionally choose to include the interaction term
         # without this is linear regression
         pred = bias + slop
         if self.intx_term:
-            pred += intx
+            pred += feat
 
         # Compute MSE loss
         mse = F.mean_squared_error(pred, y)
         rmse = F.sqrt(mse)  # Only used for reporting
 
-        # Now compute the priors / regularization
-        reg2 = F.gaussian_kl_divergence(self.latent_delta_mu.W, self.latent_delta_lv.W)
-        reg3 = F.gaussian_kl_divergence(self.latent_mu.b,
-                                        self.latent_lv.b)
-        regt = reg0 * self.lambda0 + reg1 * self.lambda1 + reg2 * self.lambda2
-        regt += reg3 * self.lambda0 + reg4 * self.lambda0
+        # Now compute the total KLD loss
+        kldt = kld0 * self.lambda0 + kld1 * self.lambda1 + kld2 * self.lambda2
 
         # Total loss is MSE plus regularization losses
-        loss = mse + regt * frac
+        frac = bs * 1.0 / self.total_nobs
+        loss = mse + kldt * frac
 
         # Log the errors
-        logs = {'loss': loss, 'rmse': rmse, 'reg0': reg0, 'regt': regt,
-                'reg1': reg1, 'reg2': reg2, 'bias': F.sum(self.bias_mu.b)}
+        logs = {'loss': loss, 'rmse': rmse, 'kld0': kld0, 'kld1': kld1,
+                'kld2': kld2, 'kldt': kldt, 'bias': F.sum(self.bias_mu.b)}
         reporter.report(logs, self)
         return loss
 
     def __call__(self, val, loc, y, is_test):
-        return self.forward(val, loc, y, is_test)
+        bs = y.data.shape[0]
+        locs = interaction(cuda.to_cpu(loc.data))
+        iloc = Variable(self.xp.asarray(locs[:, 0]))
+        jloc = Variable(self.xp.asarray(locs[:, 1]))
+        ival = Variable(self.xp.ones((bs), dtype='float32'))
+        jval = Variable(self.xp.ones((bs), dtype='float32'))
+        return self.forward(val, loc, iloc, jloc, ival, jval, y, is_test)
