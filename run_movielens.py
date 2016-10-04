@@ -90,7 +90,7 @@ train_iter = chainer.iterators.SerialIterator(train, batchsize)
 valid_iter = chainer.iterators.SerialIterator(valid, batchsize,
                                               repeat=False, shuffle=False)
 updater = training.StandardUpdater(train_iter, optimizer, device=device)
-trainer = training.Trainer(updater, (75, 'epoch'), out='out_' + str(device))
+trainer = training.Trainer(updater, (200, 'epoch'), out='out_' + str(device))
 
 # Setup logging, printing & saving
 keys = ['loss', 'rmse', 'bias', 'regt', 'reg1', 'reg2']

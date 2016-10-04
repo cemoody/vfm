@@ -13,7 +13,8 @@ on MovieLens 1M data.
 | FM        | 8192      | 20   | Y        |0        | 1e-3    | 1e-3    | 0.8618 | FM model w/ 20D latent vector and regularization |
 |VFM        | 8192      | 20   | Y        |0        | 1e-3    | 1e-3    | 0.8625 | Variational FM model with arbitrary reularization|
 |VFM        | 8192      | 20   | Y        |1        | 1       | 1       | 0.8620 | Variational FM model with default priors|
-|VFM        | 8192      | 20   | Y        |1        | 1       | 1       | 0.8580 | Variational FM model with grouping|
+|VFM        | 8192      | 20   | Y        |1        | 1       | 1       | 0.8585 | Variational FM model with grouping|
+|VFM        | 8192      | 64   | Y        |1        | 1       | 1       | 0.8800 | Higher rank model does worse|
 
 Yamada [1] reports the following errors on a 25% test set of the same
 ML-1M dataset root mean squared errors (RMSE):
