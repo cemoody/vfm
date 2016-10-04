@@ -30,11 +30,7 @@ ML-1M dataset root mean squared errors (RMSE):
 
 [1] https://arxiv.org/pdf/1507.01073.pdf
 
-**Dicussion**
-Non-variational FM is solving the objective function:
-![eq1](https://latex.codecogs.com/gif.latex?\dpi{300}&space;\small&space;y&space;\sim&space;c&space;&plus;&space;\Sigma_i&space;\beta_i&space;x_i&space;&plus;&space;\Sigma_{ij}&space;w_{ij}&space;x_i&space;x_j)
-![objfun][objfun]
-[edit](https://latex.codecogs.com/gif.download?%5Cdpi%7B300%7D%20%5Csmall%20y%20%5Csim%20c%20+%20%5CSigma_i%20%5Cbeta_i%20x_i%20+%20%5CSigma_%7Bij%7D%20w_%7Bij%7D%20x_i%20x_j%5C%5C%20y%20%5Csim%20c%20+%20%5CSigma_i%20%5Cbeta_i%20x_i%20+%20%5CSigma_%7Bij%7D%20%5Cvec%7Bv_i%7D%20%5Ccdot%20%5Cvec%7Bv_i%7D%20x_i%20x_j%5C%5C)
+# Dicussion
 
 Within the Variational FM framework we can get more than a good point estimate,
 we can can get an estimate of the mean and variance of a single feature. This
@@ -45,7 +41,7 @@ user.
 
 For typical linear regression with interactions we have:
 
-![eq1](https://latex.codecogs.com/gif.latex?\dpi{300}&space;\small&space;y&space;\sim&space;c&space;&plus;&space;\Sigma_i&space;\beta_i&space;x_i&space;&plus;&space;\Sigma_{ij}&space;w_{ij}&space;x_i&space;x_j)
+![eq1](https://latex.codecogs.com/gif.latex?%5Cdpi%7B300%7D%20y%20%5Csim%20c%20&plus;%20%5CSigma_i%20%5Cbeta_i%20x_i%20&plus;%20%5CSigma_%7Bij%7D%20w_%7Bij%7D%20x_i%20x_j)
 
 [//]: # ( y \sim c + \Sigma_i \beta_i x_i + \Sigma_{ij} w_{ij} x_i x_j)
 
@@ -54,7 +50,7 @@ Note that `x_i` is usually a sparse feature vector (but doesn't have to be). In 
 
 FMs fix this by doing a low-rank approximation to `w_ij` by saying that `w_ij=v_i * v_j` where each feature `i` has a latent rank-k vector `v_i`. Instead of computing an N x N `w_ij` matrix, we compute N x k parameters in the form of N `v_i` vectors, yielding a new objective function:
 
-![eq2](https://latex.codecogs.com/gif.latex?\dpi{300}&space;\small&space;y&space;\sim&space;c&space;&plus;&space;\Sigma_i&space;\beta_i&space;x_i&space;&plus;&space;\Sigma_{ij}&space;\vec{v_i}&space;\cdot&space;\vec{v_j}&space;x_i&space;x_j)
+![eq2](https://latex.codecogs.com/gif.latex?%5Cdpi%7B300%7D%20y%20%5Csim%20c%20&plus;%20%5CSigma_i%20%5Cbeta_i%20x_i%20&plus;%20%5CSigma_%7Bij%7D%20%5Cvec%7Bv_i%7D%20%5Ccdot%20%5Cvec%7Bv_j%7D%20x_i%20x_j)
 
 [//]: # ( y \sim c + \Sigma_i \beta_i x_i + \Sigma_{ij} \vec{v_i} \cdot \vec{v_j} x_i x_j)
 
