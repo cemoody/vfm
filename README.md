@@ -90,9 +90,9 @@ Note that the above is just the identity for the product of two independent rand
 
 The variances of the `beta` components do not covary with the `v_i` components, so the full model variance is decomposes into the sum of the individual variances:
 
-![eq5](https://latex.codecogs.com/gif.latex?%5Cdpi%7B300%7D%20var%5B%5CSigma_i%5Cbeta_i%20x_i%20&plus;%20%5CSigma_%7Bij%7D%20v_i%20v_j%20x_i%20x_j%5D%20%3D%5C%5C%20%5CSigma_i%20var%5B%5Cbeta_i%5D%20x_i%20x_j%20&plus;%20%5CSigma_%7Bij%7D%20var%5Bv_i%20v_j%5D%20x_i%20x_j%20%3D%20%5C%5C%20%5CSigma_i%20%5Csigma_%7B%5Cbeta_i%7D%20x_i%20x_j%20&plus;%20%5CSigma_%7Bij%7D%20%5B%5Cvec%7B%5Csigma_%7Bv_i%7D%7D%20%5Ccdot%20%5Cvec%7B%5Csigma_%7Bv_j%7D%7D%20&plus;%20%5Cvec%7B%5Csigma_%7Bv_i%7D%7D%20%5Ccdot%20%5Cvec%7B%5Cmu_%7Bv_j%7D%7D%20&plus;%20%5Cvec%7B%5Csigma_%7Bv_j%7D%7D%20%5Ccdot%20%5Cvec%7B%20%5Cmu_%7Bv_i%7D%7D%5D%20x_i%20x_j)
+![eq5](https://latex.codecogs.com/gif.latex?%5Cdpi%7B300%7D%20var%5B%5CSigma_i%5Cbeta_i%20x_i%20&plus;%20%5CSigma_%7Bij%7D%20v_i%20v_j%20x_i%20x_j%5D%20%3D%5C%5C%20%5CSigma_i%20var%5B%5Cbeta_i%5D%20x_i%20&plus;%20%5CSigma_%7Bij%7D%20var%5Bv_i%20v_j%5D%20x_i%20x_j%20%3D%20%5C%5C%20%5CSigma_i%20%5Csigma_%7B%5Cbeta_i%7D%20x_i%20&plus;%20%5CSigma_%7Bij%7D%20%5B%5Cvec%7B%5Csigma_%7Bv_i%7D%7D%20%5Ccdot%20%5Cvec%7B%5Csigma_%7Bv_j%7D%7D%20&plus;%20%5Cvec%7B%5Csigma_%7Bv_i%7D%7D%20%5Ccdot%20%5Cvec%7B%5Cmu_%7Bv_j%7D%7D%20&plus;%20%5Cvec%7B%5Csigma_%7Bv_j%7D%7D%20%5Ccdot%20%5Cvec%7B%20%5Cmu_%7Bv_i%7D%7D%5D%20x_i%20x_j)
 
-[//]: # ( var[\Sigma_i\beta_i x_i + \Sigma_{ij} v_i v_j x_i x_j] =\\ \Sigma_i var[\beta_i] x_i x_j + \Sigma_{ij} var[v_i v_j] x_i x_j = \\ \Sigma_i \sigma_{\beta_i} x_i x_j + \Sigma_{ij} [\vec{\sigma_{v_i}} \cdot \vec{\sigma_{v_j}} + \vec{\sigma_{v_i}} \cdot \vec{\mu_{v_j}} + \vec{\sigma_{v_j}} \cdot \vec{ \mu_{v_i}}] x_i x_j )
+[//]: # ( var[\Sigma_i\beta_i x_i + \Sigma_{ij} v_i v_j x_i x_j] =\\ \Sigma_i var[\beta_i] x_i + \Sigma_{ij} var[v_i v_j] x_i x_j = \\ \Sigma_i \sigma_{\beta_i} x_i + \Sigma_{ij} [\vec{\sigma_{v_i}} \cdot \vec{\sigma_{v_j}} + \vec{\sigma_{v_i}} \cdot \vec{\mu_{v_j}} + \vec{\sigma_{v_j}} \cdot \vec{ \mu_{v_i}}] x_i x_j )
 
 We've used the fact that `beta` and `v_i` are independent to sum the variances independently.
 
