@@ -37,14 +37,14 @@ class VFM(Chain):
         # will have means (mu) and log variances (lv) for each component.
         super(VFM, self).__init__(bias_mu=L.Bias(shape=(1,)),
                                   bias_lv=L.Bias(shape=(1,)),
-                                  slop_mu=L.Bias(shape=(1, 1, 1)),
-                                  slop_lv=L.Bias(shape=(1, 1, 1)),
+                                  slop_mu=L.Bias(shape=(1, 1)),
+                                  slop_lv=L.Bias(shape=(1, 1)),
                                   slop_delta_mu=L.EmbedID(n_features, 1,
                                                           ignore_label=-1),
                                   slop_delta_lv=L.EmbedID(n_features, 1,
                                                           ignore_label=-1),
-                                  feat_mu=L.Bias(shape=(1, 1, n_dim)),
-                                  feat_lv=L.Bias(shape=(1, 1, n_dim)),
+                                  feat_mu=L.Bias(shape=(1, n_dim)),
+                                  feat_lv=L.Bias(shape=(1, n_dim)),
                                   feat_delta_mu=L.EmbedID(n_features, n_dim,
                                                           ignore_label=-1),
                                   feat_delta_lv=L.EmbedID(n_features, n_dim,
@@ -75,7 +75,7 @@ class VFM(Chain):
         # Useful for validation dataset when we want to only guess
         # the mean.
         if is_test is not None:
-            bs_lv += is_test * self.lv_floor
+            bs_lv += F.reshape(is_test, shape) * self.lv_floor
         bias = F.gaussian(bs_mu, bs_lv)
 
         # Compute prior on the bias, so compute the KL div
@@ -101,8 +101,8 @@ class VFM(Chain):
         # all share a common mean. Then individual features slop_delta_lv
         # are shrunk towards zero, which effectively sets features to fall
         # back on the group mean.
-        sl_mu = self.slop_delta_mu(loc) + pr_mu
-        sl_lv = self.slop_delta_lv(loc) + pr_lv + is_test
+        sl_mu = F.reshape(self.slop_delta_mu(loc), shape) + pr_mu
+        sl_lv = F.reshape(self.slop_delta_lv(loc), shape) + pr_lv + is_test
         coef = F.gaussian(sl_mu, sl_lv)
         slop = F.sum(coef * val, axis=1)
 
@@ -196,9 +196,9 @@ class VFM(Chain):
 
     def __call__(self, val, loc, y, is_test):
         bs = y.data.shape[0]
-        locs = interaction(cuda.to_cpu(loc.data))
+        locs = interaction(cuda.to_cpu(loc.data)).astype('int32')
         iloc = Variable(self.xp.asarray(locs[:, 0]))
         jloc = Variable(self.xp.asarray(locs[:, 1]))
         ival = Variable(self.xp.ones((bs), dtype='float32'))
         jval = Variable(self.xp.ones((bs), dtype='float32'))
-        return self.forward(val, loc, iloc, jloc, ival, jval, y, is_test)
+        return self.forward(loc, val, iloc, jloc, ival, jval, y, is_test)
