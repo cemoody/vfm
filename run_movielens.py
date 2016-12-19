@@ -16,7 +16,7 @@ from vfm import VFM
 # Hyperparameters set through CLI
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_dim', dest='n_dim', default=20, type=int)
-parser.add_argument('--batchsize', dest='batchsize', default=8192, type=int)
+parser.add_argument('--batchsize', dest='batchsize', default=128, type=int)
 parser.add_argument('--model_type', dest='model_type', default='FM', type=str)
 parser.add_argument('--device', dest='device', default=-1, type=int)
 parser.add_argument('--lambda0', dest='lambda0', default=0.0, type=float)
@@ -49,6 +49,8 @@ if not os.path.exists(name):
 
 # First col is user, 2nd is movie id, 3rd is rating
 data = np.genfromtxt(base + '/ratings.dat', delimiter='::')
+print("WARNING: Subsetting data")
+data = data[::100, :]
 user = data[:, 0].astype('int32')
 movie = data[:, 1].astype('int32')
 rating = data[:, 2].astype('float32')
@@ -64,16 +66,15 @@ val = np.ones((len(data), 2), dtype='float32')
 tloc, vloc, tval, vval, ty, vy = train_test_split(loc, val, rating,
                                                   random_state=42)
 total_nobs = len(tloc)
-ti = np.zeros(ty.shape, dtype='float32')
-vi = np.ones(vy.shape, dtype='float32')
-train = TupleDataset(tval, tloc, ty, ti)
-valid = TupleDataset(vval, vloc, vy, vi)
+train = TupleDataset(tloc, tval, ty)
+valid = TupleDataset(vloc, vval, vy)
 
 # Setup model
 print "Running model:" + model_type
 if model_type == 'FM':
-    model = FM(n_features, n_dim, lambda0=lambda0, lambda1=lambda1, lambda2=lambda2,
-               init_bias=ty.mean(), intx_term=intx_term, total_nobs=total_nobs)
+    model = FM(n_features, n_dim, lambda0=lambda0, lambda1=lambda1,
+               lambda2=lambda2, init_bias=ty.mean(), intx_term=intx_term,
+               total_nobs=total_nobs)
 elif model_type == 'VFM':
     mu = ty.mean()
     lv = 0.5 * np.log(ty.std())
@@ -81,9 +82,19 @@ elif model_type == 'VFM':
                 total_nobs=total_nobs)
 if device >= 0:
     chainer.cuda.get_device(device).use()
-    model.to_gpu(device) 
+    model.to_gpu(device)
 optimizer = chainer.optimizers.RMSprop()
 optimizer.setup(model)
+
+
+class TestModeEvaluator(extensions.Evaluator):
+    def evaluate(self):
+        model = self.get_target('main')
+        model.train = False
+        ret = super(TestModeEvaluator, self).evaluate()
+        model.train = True
+        return ret
+
 
 # Setup iterators
 train_iter = chainer.iterators.SerialIterator(train, batchsize)
@@ -97,6 +108,7 @@ keys = ['loss', 'rmse', 'bias', 'regt', 'reg1', 'reg2']
 reports = ['iteration', 'epoch']
 reports += ['main/' + key for key in keys]
 reports += ['validation/main/rmse']
+trainer.extend(TestModeEvaluator(valid_iter, model, device=device))
 trainer.extend(extensions.Evaluator(valid_iter, model, device=device))
 trainer.extend(extensions.dump_graph('main/loss'))
 trainer.extend(extensions.snapshot(), trigger=(10, 'epoch'))
