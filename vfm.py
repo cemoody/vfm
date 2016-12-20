@@ -15,8 +15,8 @@ def batch_interactions(x):
     xp = cuda.get_array_module(x.data)
     batchsize = x.shape[0]
     shape = (batchsize, x.shape[1] ** 2)
-    left = xp.tile(x, (1, x.shape[1]))
-    right = xp.repeat(x, x.shape[1]).reshape(shape)
+    left = xp.tile(x.data, (1, x.shape[1]))
+    right = xp.repeat(x.data, x.shape[1]).reshape(shape)
     return left, right
 
 
@@ -72,6 +72,8 @@ class VFM(Chain):
         # Bias is drawn from a Gaussian with given mu and log variance
         bs_mu = F.broadcast_to(self.bias_mu.b, shape)
         bs_lv = F.broadcast_to(self.bias_lv.b, shape)
+        bias = F.flatten(F.gaussian(bs_mu, bs_lv))
+
         # Add a very negative log variance so we're sampling
         # from a very narrow distribution about the mean.
         # Useful for validation dataset when we want to only guess
@@ -82,7 +84,7 @@ class VFM(Chain):
         # Compute prior on the bias, so compute the KL div
         # from the KL(N(mu_bias, var_bias) | N(0, 1))
         kld = F.gaussian_kl_divergence(self.bias_mu.b, self.bias_lv.b)
-        return bs_mu, bs_lv, kld
+        return bias, kld
 
     def term_slop(self, loc, val, bs, nf, train=True):
         """ Compute the slope for each active feature.
@@ -112,11 +114,12 @@ class VFM(Chain):
         # Calculate divergence of individual delta means and delta vars
         args = (self.slop_delta_mu.W, self.slop_delta_lv.W)
         kld2 = F.gaussian_kl_divergence(*args)
-        return slop, sl_lv, kld1 + kld2
+
+        return slop, kld1 + kld2
 
     def term_feat(self, iloc, jloc, ival, jval, bs, nf, train=True):
         # Change all of the shapes to form interaction vectors
-        shape = (bs, nf, self.n_dim)
+        shape = (bs, nf * 2, self.n_dim)
         feat_mu_vec = F.broadcast_to(self.feat_mu_vec.b, shape)
         feat_lv_vec = F.broadcast_to(self.feat_lv_vec.b, shape)
 
@@ -136,11 +139,11 @@ class VFM(Chain):
         feat = dot(feat_vec, ival * jval)
 
         # Compute the KLD for the group mean vector and variance vector
-        kld1 = F.gaussian_kl_divergence(self.feat_mu.b, self.feat_lv.b)
+        kld1 = F.gaussian_kl_divergence(self.feat_mu_vec.b, self.feat_lv_vec.b)
         # Compute the KLD for vector deviations from the group mean and var
         kld2 = F.gaussian_kl_divergence(self.feat_delta_mu.W,
                                         self.feat_delta_lv.W)
-        return feat, feat_lv, kld1 + kld2
+        return feat, kld1 + kld2
 
     def forward(self, loc, val, y, train=True):
         """ Given the sparse feature vector defined by location
@@ -173,12 +176,12 @@ class VFM(Chain):
         ival, jval = batch_interactions(val)
 
         # Compute scalar bias term
-        bias, bias_lv, kld0 = self.term_bias(bs, train=train)
+        bias, kld0 = self.term_bias(bs, train=train)
         # Compute the feature weights
-        slop, slop_lv, kld1 = self.term_slop(loc, val, bs, nf, train=train)
+        slop, kld1 = self.term_slop(loc, val, bs, nf, train=train)
         # Compute factorized weights on interaction features
-        feat, feat_lv, kld2 = self.term_feat(iloc, jloc, ival, jval,
-                                             bs, nf, train=train)
+        feat, kld2 = self.term_feat(iloc, jloc, ival, jval,
+                                    bs, nf, train=train)
 
         # Optionally choose to include the interaction term
         # without this is linear regression

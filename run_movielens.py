@@ -16,7 +16,7 @@ from vfm import VFM
 # Hyperparameters set through CLI
 parser = argparse.ArgumentParser()
 parser.add_argument('--n_dim', dest='n_dim', default=20, type=int)
-parser.add_argument('--batchsize', dest='batchsize', default=128, type=int)
+parser.add_argument('--batchsize', dest='batchsize', default=4096, type=int)
 parser.add_argument('--model_type', dest='model_type', default='FM', type=str)
 parser.add_argument('--device', dest='device', default=-1, type=int)
 parser.add_argument('--lambda0', dest='lambda0', default=0.0, type=float)
@@ -49,8 +49,8 @@ if not os.path.exists(name):
 
 # First col is user, 2nd is movie id, 3rd is rating
 data = np.genfromtxt(base + '/ratings.dat', delimiter='::')
-print("WARNING: Subsetting data")
-data = data[::100, :]
+# print("WARNING: Subsetting data")
+# data = data[::100, :]
 user = data[:, 0].astype('int32')
 movie = data[:, 1].astype('int32')
 rating = data[:, 2].astype('float32')
@@ -104,7 +104,7 @@ updater = training.StandardUpdater(train_iter, optimizer, device=device)
 trainer = training.Trainer(updater, (200, 'epoch'), out='out_' + str(device))
 
 # Setup logging, printing & saving
-keys = ['loss', 'rmse', 'bias', 'regt', 'reg1', 'reg2']
+keys = ['loss', 'rmse', 'bias', 'kld0', 'kld1', 'kld2']
 reports = ['iteration', 'epoch']
 reports += ['main/' + key for key in keys]
 reports += ['validation/main/rmse']
