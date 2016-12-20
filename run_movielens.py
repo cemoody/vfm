@@ -15,14 +15,16 @@ from vfm import VFM
 
 # Hyperparameters set through CLI
 parser = argparse.ArgumentParser()
-parser.add_argument('--n_dim', dest='n_dim', default=20, type=int)
+parser.add_argument('--n_dim', dest='n_dim', default=8, type=int)
 parser.add_argument('--batchsize', dest='batchsize', default=4096, type=int)
 parser.add_argument('--model_type', dest='model_type', default='FM', type=str)
 parser.add_argument('--device', dest='device', default=-1, type=int)
-parser.add_argument('--lambda0', dest='lambda0', default=0.0, type=float)
-parser.add_argument('--lambda1', dest='lambda1', default=1e-3, type=float)
-parser.add_argument('--lambda2', dest='lambda2', default=1e-3, type=float)
+parser.add_argument('--lambda0', dest='lambda0', default=1, type=float)
+parser.add_argument('--lambda1', dest='lambda1', default=1, type=float)
+parser.add_argument('--lambda2', dest='lambda2', default=1, type=float)
 parser.add_argument('--intx_term', dest='intx_term', default=1, type=int)
+parser.add_argument('--alpha', dest='alpha', default=1e-3, type=float)
+parser.add_argument('--resume', dest='resume', default=None, type=str)
 
 # Expand arguments into local variables
 args = vars(parser.parse_args())
@@ -35,6 +37,8 @@ lambda0 = args.pop('lambda0')
 lambda1 = args.pop('lambda1')
 lambda2 = args.pop('lambda2')
 intx_term = args.pop('intx_term')
+alpha = args.pop('alpha')
+resume = args.pop('resume')
 
 # Download, unzip and read in the dataset
 name = 'ml-1m.zip'
@@ -79,11 +83,12 @@ elif model_type == 'VFM':
     mu = ty.mean()
     lv = 0.5 * np.log(ty.std())
     model = VFM(n_features, n_dim, init_bias_mu=mu, init_bias_lv=lv,
-                total_nobs=total_nobs)
+                total_nobs=total_nobs, lambda1=lambda1, lambda2=lambda2,
+                lambda0=lambda0)
 if device >= 0:
     chainer.cuda.get_device(device).use()
     model.to_gpu(device)
-optimizer = chainer.optimizers.RMSprop()
+optimizer = chainer.optimizers.Adam(alpha)
 optimizer.setup(model)
 
 
@@ -117,7 +122,9 @@ trainer.extend(extensions.PrintReport(reports))
 trainer.extend(extensions.ProgressBar(update_interval=10))
 
 # If previous model detected, resume
-# chainer.serializers.load_npz(args.resume, trainer)
+if resume:
+    print("Loading from {}".format(resume))
+    chainer.serializers.load_npz(resume, trainer)
 
 # Run the model
 trainer.run()

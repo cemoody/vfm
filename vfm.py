@@ -24,7 +24,7 @@ class VFM(Chain):
     lv_floor = -100.0
 
     def __init__(self, n_features=None, n_dim=8, lossfun=F.mean_squared_error,
-                 lambda0=5e-3, lambda1=5e-3, lambda2=5e-3, init_bias_mu=0.0,
+                 lambda0=1, lambda1=1, lambda2=1, init_bias_mu=0.0,
                  init_bias_lv=0.0, intx_term=True, total_nobs=1):
         self.n_dim = n_dim
         self.n_features = n_features
@@ -53,8 +53,8 @@ class VFM(Chain):
                                                           ignore_label=-1))
 
         # Xavier initialize weights
-        c = np.sqrt(n_features * n_dim)
-        d = np.sqrt(n_features)
+        c = np.sqrt(n_features * n_dim) * 1e3
+        d = np.sqrt(n_features) * 1e3
         self.feat_delta_mu.W.data[...] = np.random.randn(n_features, n_dim) / c
         self.feat_delta_lv.W.data[...] = np.random.randn(n_features, n_dim) / c
         self.slop_delta_mu.W.data[...] = np.random.randn(n_features, 1) / d
@@ -98,7 +98,7 @@ class VFM(Chain):
         # indicating to sample N(mean, logvar) or just draw
         # the mean preicsely
         if not train:
-            pr_lv -= self.lv_floor
+            pr_lv += self.lv_floor
 
         # The feature slopes are grouped together so that they
         # all share a common mean. Then individual features slop_delta_lv
@@ -122,21 +122,18 @@ class VFM(Chain):
         shape = (bs, nf * 2, self.n_dim)
         feat_mu_vec = F.broadcast_to(self.feat_mu_vec.b, shape)
         feat_lv_vec = F.broadcast_to(self.feat_lv_vec.b, shape)
+        if not train:
+            feat_lv_vec += self.lv_floor
 
         # Construct the interaction mean and variance
         # iloc is (bs, nf), feat(iloc) is (bs, nf, ndim) and
         # dot(feat, feat) is (bs, nf)
-        feat_mu = dot(feat_mu_vec + self.feat_delta_mu(iloc),
-                      feat_lv_vec + self.feat_delta_mu(jloc))
-        feat_lv = dot(feat_mu_vec + self.feat_delta_mu(iloc),
-                      feat_lv_vec + self.feat_delta_mu(jloc))
-        feat_lv += dot(self.feat_delta_lv(iloc), self.feat_delta_lv(jloc))
-        if not train:
-            feat_lv += self.lv_floor
-        # feat_vec is (bs, nf) with each element indicating <v_i, v_j>
-        feat_vec = F.gaussian(feat_mu, feat_lv)
+        ivec = F.gaussian(feat_mu_vec + self.feat_delta_mu(iloc),
+                          feat_lv_vec + self.feat_delta_lv(iloc))
+        jvec = F.gaussian(feat_mu_vec + self.feat_delta_mu(jloc),
+                          feat_lv_vec + self.feat_delta_lv(jloc))
         # feat is (bs, )
-        feat = dot(feat_vec, ival * jval)
+        feat = dot(F.sum(ivec * jvec, axis=2), ival * jval)
 
         # Compute the KLD for the group mean vector and variance vector
         kld1 = F.gaussian_kl_divergence(self.feat_mu_vec.b, self.feat_lv_vec.b)
@@ -203,8 +200,7 @@ class VFM(Chain):
         kldt = kld0 * self.lambda0 + kld1 * self.lambda1 + kld2 * self.lambda2
 
         # Total loss is MSE plus regularization losses
-        frac = bs * 1.0 / self.total_nobs
-        loss = mse + kldt * frac
+        loss = mse + kldt * (1.0 / self.total_nobs)
 
         # Log the errors
         logs = {'loss': loss, 'rmse': rmse, 'kld0': kld0, 'kld1': kld1,
