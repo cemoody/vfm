@@ -24,22 +24,18 @@ After Dec 19:
 |VFM        | 4096      |  8   | Y        | 0       | 1       | 1       | 0.8775 |  |
 |VFM        | 4096      |  8   | Y        | 1       | 1       | 1       | 0.8870 | with alpha=1e-2, fast but inaccurate |
 |VFM        | 4096      |  8   | Y        | 10      | 10      | 10      | 0.8628 | more regularization than default |
-
-|VFM        | 4096      |  8   | Y        | 1       | 1       | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 10      | 1       | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 1       | 10      | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 1       | 1       | 10      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-
-|VFM        | 4096      |  8   | Y        | 10      | 10      | 10      | 0.     | added 300 epochs to 10-10-10 run |
-|VFM        | 4096      |  8   | Y        | 0       | 1       | 10      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 0       | 0       | 10      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 0       | 0       | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-
-|VFM        | 4096      |  8   | Y        | 1       | 1       | 50      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 0       | 1       | 50      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 0       | 1       | 100     | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-|VFM        | 4096      |  8   | Y        | 1       | 1       | 100     | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
-
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 1       | 0.8805 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 10      | 1       | 1       | 0.8805 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 1       | 10      | 1       | 0.8793 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 10      | 0.8623 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 10      | 10      | 10      | 0.8619 | added 300 epochs to 10-10-10 run |
+|VFM        | 4096      |  8   | Y        | 0       | 1       | 10      | 0.8629 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 0       | 10      | 0.8793 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 0       | 1       | 0.8815 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 50      | 0.8561 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 1       | 50      | 0.8561 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 1       | 100     | 0.8672 | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 100     | 0.8673 | default, initialized from 10-10-10 run for 200->500 epochs |
 |VFM        | 4096      |  8   | Y        | 100     | 100     | 100     | 0.8708 | initialized from 10-10-10 model |
 
 Yamada [1] reports the following errors on a 25% test set of the same
