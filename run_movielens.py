@@ -85,6 +85,12 @@ elif model_type == 'VFM':
     model = VFM(n_features, n_dim, init_bias_mu=mu, init_bias_lv=lv,
                 total_nobs=total_nobs, lambda1=lambda1, lambda2=lambda2,
                 lambda0=lambda0)
+elif model_type == 'AutoVFM':
+    mu = ty.mean()
+    lv = 0.5 * np.log(ty.std())
+    model = AutoVFM(n_features, n_dim, init_bias_mu=mu, init_bias_lv=lv,
+                    total_nobs=total_nobs, lambda1=lambda1, lambda2=lambda2,
+                    lambda0=lambda0)
 if device >= 0:
     chainer.cuda.get_device(device).use()
     model.to_gpu(device)
@@ -106,10 +112,12 @@ train_iter = chainer.iterators.SerialIterator(train, batchsize)
 valid_iter = chainer.iterators.SerialIterator(valid, batchsize,
                                               repeat=False, shuffle=False)
 updater = training.StandardUpdater(train_iter, optimizer, device=device)
-trainer = training.Trainer(updater, (200, 'epoch'), out='out_' + str(device))
+trainer = training.Trainer(updater, (500, 'epoch'), out='out_' + str(device))
 
 # Setup logging, printing & saving
-keys = ['loss', 'rmse', 'bias', 'kld0', 'kld1', 'kld2']
+keys = ['loss', 'rmse', 'bias', 'kld0', 'kld1']
+keys += ['kldg', 'kldi', 'hypg', 'hypi']
+keys += ['hypglv', 'hypilv']
 reports = ['iteration', 'epoch']
 reports += ['main/' + key for key in keys]
 reports += ['validation/main/rmse']

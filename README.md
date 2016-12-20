@@ -16,6 +16,32 @@ on MovieLens 1M data.
 |VFM        | 8192      | 20   | Y        |1        | 1       | 1       | 0.8585 | Variational FM model with grouping|
 |VFM        | 8192      | 64   | Y        |1        | 1       | 1       | 0.8800 | Higher rank model does worse|
 
+After Dec 19:
+
+| model     | batchsize | rank |intx term | lambda0 | lambda1 | lambda2 | RMSE   | Notes |
+|-----------|-----------|------|----------|---------|---------|---------| -------| ----- |
+|VFM        | 4096      |  8   | Y        | 0       | 0       | 0       | 0.8782 | no regularization |
+|VFM        | 4096      |  8   | Y        | 0       | 1       | 1       | 0.8775 |  |
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 1       | 0.8870 | with alpha=1e-2, fast but inaccurate |
+|VFM        | 4096      |  8   | Y        | 10      | 10      | 10      | 0.8628 | more regularization than default |
+
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 10      | 1       | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 1       | 10      | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 10      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+
+|VFM        | 4096      |  8   | Y        | 10      | 10      | 10      | 0.     | added 300 epochs to 10-10-10 run |
+|VFM        | 4096      |  8   | Y        | 0       | 1       | 10      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 0       | 10      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 0       | 1       | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 50      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 1       | 50      | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 0       | 1       | 100     | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+|VFM        | 4096      |  8   | Y        | 1       | 1       | 100     | 0.     | default, initialized from 10-10-10 run for 200->500 epochs |
+
+|VFM        | 4096      |  8   | Y        | 100     | 100     | 100     | 0.8708 | initialized from 10-10-10 model |
+
 Yamada [1] reports the following errors on a 25% test set of the same
 ML-1M dataset root mean squared errors (RMSE):
 
