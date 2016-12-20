@@ -1,8 +1,3 @@
-import chainer
-from chainer import training
-from chainer.training import extensions
-from chainer.datasets import TupleDataset
-
 from chainer import Chain
 from chainer import links as L
 from chainer import functions as F
@@ -25,7 +20,20 @@ def batch_interactions(x):
     return left, right
 
 
-class VFM(Chain):
+def kl_div(mu1, lv1, lv2):
+    # KL Divergence between given normal and prior at N(0, sigma_2)
+    # Prior assumes mean at zero
+    # lns2 - lns1 + (s2^2 + (u1 - u2)**2)/ 2s2**2 - 0.5
+    if len(lv1.shape) == 2:
+        lv1 = F.expand_dims(lv1, 0)
+        mu1 = F.expand_dims(mu1, 0)
+    lv2 = F.broadcast_to(lv2, lv1.shape)
+    v12 = F.exp(lv1)**2.0
+    v22 = F.exp(lv2)**2.0
+    return lv2 - lv1 + .5 * v12 / v22 + .5 * mu1**2. / v22 - .5
+
+
+class AutoVFM(Chain):
     lv_floor = -100.0
 
     def __init__(self, n_features=None, n_dim=8, lossfun=F.mean_squared_error,
@@ -42,20 +50,23 @@ class VFM(Chain):
 
         # In contrast to the FM model, the slopes and latent vectors
         # will have means (mu) and log variances (lv) for each component.
-        super(VFM, self).__init__(bias_mu=L.Bias(shape=(1,)),
-                                  bias_lv=L.Bias(shape=(1,)),
-                                  slop_mu=L.Bias(shape=(1, 1)),
-                                  slop_lv=L.Bias(shape=(1, 1)),
-                                  slop_delta_mu=L.EmbedID(n_features, 1,
-                                                          ignore_label=-1),
-                                  slop_delta_lv=L.EmbedID(n_features, 1,
-                                                          ignore_label=-1),
-                                  feat_mu_vec=L.Bias(shape=(1, 1, n_dim)),
-                                  feat_lv_vec=L.Bias(shape=(1, 1, n_dim)),
-                                  feat_delta_mu=L.EmbedID(n_features, n_dim,
-                                                          ignore_label=-1),
-                                  feat_delta_lv=L.EmbedID(n_features, n_dim,
-                                                          ignore_label=-1))
+        ones_3d = (1, 1, 1)
+        super(AutoVFM, self).__init__(bias_mu=L.Bias(shape=(1,)),
+                                      bias_lv=L.Bias(shape=(1,)),
+                                      slop_mu=L.Bias(shape=(1, 1)),
+                                      slop_lv=L.Bias(shape=(1, 1)),
+                                      slop_delta_mu=L.EmbedID(n_features, 1,
+                                                              ignore_label=-1),
+                                      slop_delta_lv=L.EmbedID(n_features, 1,
+                                                              ignore_label=-1),
+                                      feat_mu_vec=L.Bias(shape=(1, 1, n_dim)),
+                                      feat_lv_vec=L.Bias(shape=(1, 1, n_dim)),
+                                      hyper_feat_lv_vec=L.Bias(shape=ones_3d),
+                                      feat_delta_mu=L.EmbedID(n_features, n_dim,
+                                                              ignore_label=-1),
+                                      feat_delta_lv=L.EmbedID(n_features, n_dim,
+                                                              ignore_label=-1),
+                                      hyper_feat_delta_lv=L.Bias(shape=ones_3d))
 
         # Xavier initialize weights
         c = np.sqrt(n_features * n_dim) * 1e3
@@ -141,11 +152,23 @@ class VFM(Chain):
         feat = dot(F.sum(ivec * jvec, axis=2), ival * jval)
 
         # Compute the KLD for the group mean vector and variance vector
-        kld1 = F.gaussian_kl_divergence(self.feat_mu_vec.b, self.feat_lv_vec.b)
-        # Compute the KLD for vector deviations from the group mean and var
-        kld2 = F.gaussian_kl_divergence(self.feat_delta_mu.W,
-                                        self.feat_delta_lv.W)
-        return feat, kld1 + kld2
+        # KL(N(group mu, group lv) || N(0, hyper_lv))
+        # hyper_lv ~ gamma(1, 1)
+        kldg = F.sum(kl_div(self.feat_mu_vec.b, self.feat_lv_vec.b,
+                            self.hyper_feat_lv_vec.b))
+        # Compute deviations from hyperprior
+        # KL(N(delta_i, delta_i lv) || N(0, hyper_delta_lv))
+        # hyper_delta_lv ~ gamma(1, 1)
+        kldi = F.sum(kl_div(self.feat_delta_mu.W, self.feat_delta_lv.W,
+                            self.hyper_feat_delta_lv.b))
+        # Hyperprior penalty for log(var) ~ Gamma(alpha=1, beta=1)
+        # Gamma(log(var) | alpha=1, beta=1) = -log(var)
+        # The loss function will attempt to make log(var) as negative as 
+        # possible which will in turn make the variance as small as possible
+        # The sum just casts a 1D vector to a scalar
+        hyperg = -F.sum(self.hyper_feat_lv_vec.b)
+        hyperi = -F.sum(self.hyper_feat_delta_lv.b)
+        return feat, kldg, kldi, hyperg, hyperi
 
     def forward(self, loc, val, y, train=True):
         """ Given the sparse feature vector defined by location
@@ -182,8 +205,8 @@ class VFM(Chain):
         # Compute the feature weights
         slop, kld1 = self.term_slop(loc, val, bs, nf, train=train)
         # Compute factorized weights on interaction features
-        feat, kld2 = self.term_feat(iloc, jloc, ival, jval,
-                                    bs, nf, train=train)
+        feat, kldg, kldi, hypg, hypi = self.term_feat(iloc, jloc, ival, jval,
+                                                      bs, nf, train=train)
 
         # Optionally choose to include the interaction term
         # without this is linear regression
@@ -191,73 +214,29 @@ class VFM(Chain):
         if self.intx_term:
             pred += feat
 
-        return pred, kld0, kld1, kld2
+        return pred, kld0, kld1, kldg, kldi, hypg, hypi
 
     def __call__(self, loc, val, y, train=True):
         bs = val.data.shape[0]
-        pred, kld0, kld1, kld2 = self.forward(loc, val, y, train=train)
+        ret = self.forward(loc, val, y, train=train)
+        pred, kld0, kld1, kldg, kldi, hypg, hypi = ret
 
         # Compute MSE loss
         mse = F.mean_squared_error(pred, y)
         rmse = F.sqrt(mse)  # Only used for reporting
 
         # Now compute the total KLD loss
-        kldt = kld0 * self.lambda0 + kld1 * self.lambda1 + kld2 * self.lambda2
+        kldt = kld0 * self.lambda0 + kld1 * self.lambda1
+        kldt += kldg + kldi + hypg + hypi
 
         # Total loss is MSE plus regularization losses
         loss = mse + kldt * (1.0 / self.total_nobs)
 
         # Log the errors
         logs = {'loss': loss, 'rmse': rmse, 'kld0': kld0, 'kld1': kld1,
-                'kld2': kld2, 'kldt': kldt, 'bias': F.sum(self.bias_mu.b)}
+                'kldg': kldg, 'kldi': kldi, 'hypg': hypg, 'hypi': hypi,
+                'hypglv': F.sum(self.hyper_feat_lv_vec.b),
+                'hypilv': F.sum(self.hyper_feat_delta_lv.b),
+                'kldt': kldt, 'bias': F.sum(self.bias_mu.b)}
         reporter.report(logs, self)
         return loss
-
-
-class TestModeEvaluator(extensions.Evaluator):
-    def evaluate(self):
-        model = self.get_target('main')
-        model.train = False
-        ret = super(TestModeEvaluator, self).evaluate()
-        model.train = True
-        return ret
-
-
-def fit(model, train, valid, device=-1, batchsize=4096, n_epoch=500,
-        resume=None, alpha=1e-3):
-    if device >= 0:
-        chainer.cuda.get_device(device).use()
-        model.to_gpu(device)
-    optimizer = chainer.optimizers.Adam(alpha)
-    optimizer.setup(model)
-
-    # Setup iterators
-    train_iter = chainer.iterators.SerialIterator(train, batchsize)
-    valid_iter = chainer.iterators.SerialIterator(valid, batchsize,
-                                                  repeat=False, shuffle=False)
-    updater = training.StandardUpdater(train_iter, optimizer, device=device)
-    trainer = training.Trainer(updater, (n_epoch, 'epoch'),
-                               out='out_' + str(device))
-
-    # Setup logging, printing & saving
-    keys = ['loss', 'rmse', 'bias', 'kld0', 'kld1']
-    keys += ['kldg', 'kldi', 'hypg', 'hypi']
-    keys += ['hypglv', 'hypilv']
-    reports = ['epoch']
-    reports += ['main/' + key for key in keys]
-    reports += ['validation/main/rmse']
-    trainer.extend(TestModeEvaluator(valid_iter, model, device=device))
-    trainer.extend(extensions.Evaluator(valid_iter, model, device=device))
-    trainer.extend(extensions.dump_graph('main/loss'))
-    trainer.extend(extensions.snapshot(), trigger=(10, 'epoch'))
-    trainer.extend(extensions.LogReport(trigger=(1, 'epoch')))
-    trainer.extend(extensions.PrintReport(reports))
-    trainer.extend(extensions.ProgressBar(update_interval=10))
-
-    # If previous model detected, resume
-    if resume:
-        print("Loading from {}".format(resume))
-        chainer.serializers.load_npz(resume, trainer)
-
-    # Run the model
-    trainer.run()

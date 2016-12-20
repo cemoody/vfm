@@ -12,6 +12,7 @@ from chainer.datasets import TupleDataset
 
 from fm import FM
 from vfm import VFM
+from auto_vfm import AutoVFM
 
 # Hyperparameters set through CLI
 parser = argparse.ArgumentParser()
@@ -118,7 +119,7 @@ trainer = training.Trainer(updater, (500, 'epoch'), out='out_' + str(device))
 keys = ['loss', 'rmse', 'bias', 'kld0', 'kld1']
 keys += ['kldg', 'kldi', 'hypg', 'hypi']
 keys += ['hypglv', 'hypilv']
-reports = ['iteration', 'epoch']
+reports = ['epoch']
 reports += ['main/' + key for key in keys]
 reports += ['validation/main/rmse']
 trainer.extend(TestModeEvaluator(valid_iter, model, device=device))
